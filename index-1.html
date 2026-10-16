@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>سواپ USDT به BTC</title>
+<style>
+body{font-family:system-ui,Tahoma,sans-serif;background:#0f1115;color:#eee;display:flex;justify-content:center;padding:24px}
+.c{width:100%;max-width:400px;background:#1a1d24;border-radius:16px;padding:20px}
+input,button{width:100%;box-sizing:border-box;padding:14px;border-radius:10px;border:0;font-size:16px;margin-top:10px}
+input{background:#0f1115;color:#fff;direction:ltr}
+button{background:#f3ba2f;color:#000;font-weight:700;cursor:pointer}button:disabled{opacity:.5}
+.r{margin-top:14px;font-size:14px;line-height:1.9;color:#bbb}
+</style></head><body><div class="c">
+<h3>سواپ USDT ← BTCB (BNB Chain)</h3>
+<button id="conn">اتصال کیف پول</button>
+<input id="amt" placeholder="مبلغ USDT" inputmode="decimal">
+<div class="r" id="info"></div>
+<button id="go" disabled>سواپ</button>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const USDT='0x55d398326f99059fF775485246999027B3197955';
+let acct=null, timer=null, last=null;
+const toWei=s=>{const[a,b='']=s.split('.');return (BigInt(a||'0')*10n**18n+BigInt((b+'0'.repeat(18)).slice(0,18))).toString()};
+const fromWei=w=>(Number(BigInt(w))/1e18).toFixed(8);
+const pad=h=>h.replace('0x','').toLowerCase().padStart(64,'0');
+const say=t=>$('info').textContent=t;
+
+$('conn').onclick=async()=>{
+  if(!window.ethereum) return say('کیف پول (مثلاً Trust Wallet یا MetaMask) پیدا نشد. صفحه را داخل مرورگر خود کیف پول باز کنید.');
+  [acct]=await ethereum.request({method:'eth_requestAccounts'});
+  try{await ethereum.request({method:'wallet_switchEthereumChain',params:[{chainId:'0x38'}]})}catch(e){return say('لطفاً شبکه را روی BNB Chain بگذارید.')}
+  $('conn').textContent=acct.slice(0,6)+'...'+acct.slice(-4);
+  refresh();
+};
+$('amt').oninput=()=>{clearTimeout(timer);timer=setTimeout(refresh,500)};
+
+async function refresh(){
+  const v=$('amt').value.trim(); $('go').disabled=true; last=null;
+  if(!acct||!v||isNaN(v)||+v<=0) return;
+  say('در حال قیمت‌گیری...');
+  const r=await fetch(`/api/swap?mode=price&sellAmount=${toWei(v)}&taker=${acct}`);
+  const d=await r.json();
+  if(!r.ok||!d.buyAmount) return say('خطا: '+(d.message||d.error||JSON.stringify(d)).slice(0,120));
+  last=d;
+  const fee=d.fees&&d.fees.integratorFee?fromWei(d.fees.integratorFee.amount):'0';
+  say(`دریافتی تقریبی: ${fromWei(d.buyAmount)} BTCB\nکارمزد سرویس: ${fee} BTCB`);
+  $('go').textContent=d.issues&&d.issues.allowance?'تأیید دسترسی USDT':'سواپ';
+  $('go').disabled=false;
+}
+
+$('go').onclick=async()=>{
+  const v=$('amt').value.trim(); $('go').disabled=true;
+  try{
+    if(last.issues&&last.issues.allowance){
+      const sp=last.issues.allowance.spender;
+      await ethereum.request({method:'eth_sendTransaction',params:[{from:acct,to:USDT,
+        data:'0x095ea7b3'+pad(sp)+pad('0x'+BigInt(toWei(v)).toString(16))}]});
+      say('تأیید ارسال شد. چند ثانیه بعد دوباره قیمت‌گیری می‌شود...');
+      return setTimeout(refresh,8000);
+    }
+    const q=await(await fetch(`/api/swap?mode=quote&sellAmount=${toWei(v)}&taker=${acct}`)).json();
+    if(!q.transaction) return say('خطا: '+(q.message||'quote نامعتبر'));
+    const t=q.transaction;
+    const h=await ethereum.request({method:'eth_sendTransaction',params:[{from:acct,to:t.to,data:t.data,
+      value:'0x'+BigInt(t.value||0).toString(16)}]});
+    say('ارسال شد: '+h);
+  }catch(e){say('لغو یا خطا: '+(e.message||e))}
+  $('go').disabled=false;
+};
+</script></body></html>
