@@ -62,7 +62,7 @@ $('go').onclick=async()=>{
     if(!q.transaction) return say('خطا: '+(q.message||'quote نامعتبر'));
     const t=q.transaction;
     const h=await ethereum.request({method:'eth_sendTransaction',params:[{from:acct,to:t.to,data:t.data,
-      value:'0x'+BigInt(t.value||0).toString(16),gas:t.gas?'0x'+BigInt(t.gas).toString(16):undefined}]});
+      value:'0x'+BigInt(t.value||0).toString(16)}]});
     say('ارسال شد: '+h);
   }catch(e){say('لغو یا خطا: '+(e.message||e))}
   $('go').disabled=false;
